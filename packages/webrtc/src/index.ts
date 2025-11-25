@@ -12,7 +12,7 @@ import {
   AssemblyAISTTTransform,
   AgentTransform,
   AIMessageChunkTransform,
-  HumeTTSTransform,
+  ElevenLabsTTSTransform,
   LangChainAudioReadableStream,
   PipelineVisualizer,
 } from "@voice-sandwich-demo/web";
@@ -91,12 +91,16 @@ app.get(
       )
       .pipeThrough(new AgentTransform(agent))
       .pipeThrough(new AIMessageChunkTransform())
-      .pipeThrough(new HumeTTSTransform({
-        apiKey: process.env.HUME_API_KEY!,
-        voiceName: process.env.HUME_VOICE_NAME!,
+      .pipeThrough(new ElevenLabsTTSTransform({
+        apiKey: process.env.ELEVENLABS_API_KEY!,
+        voiceId: process.env.ELEVENLABS_VOICE_ID!,
       }));
 
     const reader = pipeline.getReader();
+
+    // Track audio output for diagnostics
+    let audioChunksSent = 0;
+    let totalBytesSent = 0;
 
     // Start reading from pipeline and send through data channel
     async function startPipelineReader() {
@@ -108,8 +112,18 @@ app.get(
           if (audioDataChannel && audioDataChannel.readyState === "open") {
             // Send audio data through WebRTC data channel
             audioDataChannel.send(value);
+            audioChunksSent++;
+            totalBytesSent += value.length;
+            
+            // Log periodically
+            if (audioChunksSent === 1) {
+              console.log("Pipeline: Sending first audio chunk to client");
+            }
+          } else {
+            console.warn(`Pipeline: Data channel not open, dropping audio chunk (state: ${audioDataChannel?.readyState})`);
           }
         }
+        console.log(`Pipeline: Finished reading (${audioChunksSent} chunks, ${totalBytesSent} bytes sent)`);
       } catch (e) {
         console.error("Pipeline error:", e);
       }
@@ -177,10 +191,18 @@ app.get(
             };
 
             channel.onmessage = (msgEvent) => {
+              // Don't enqueue if pipeline is closed
+              if (pipelineClosed) return;
+              
               // Receive audio data from client
               const data = msgEvent.data;
               if (data instanceof ArrayBuffer) {
-                controller.enqueue(Buffer.from(data));
+                try {
+                  controller.enqueue(Buffer.from(data));
+                } catch (e) {
+                  // Controller might be closed, ignore
+                  console.warn("Failed to enqueue audio data:", e);
+                }
               } else if (typeof data === "string") {
                 // Could be a control message
                 console.log("Received string message:", data);
