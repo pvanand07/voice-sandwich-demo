@@ -1,76 +1,67 @@
-# syntax=docker/dockerfile:1
+# syntax = docker/dockerfile:1
 
-# Build stage
-FROM node:20-slim AS builder
+# Adjust NODE_VERSION as desired
+ARG NODE_VERSION=20.18.0
+FROM node:${NODE_VERSION}-slim AS base
+
+LABEL fly_launch_runtime="NodeJS"
 
 # Install pnpm
 RUN corepack enable && corepack prepare pnpm@10.22.0 --activate
 
-# Install build dependencies for native modules (wrtc, onnxruntime-node)
-RUN apt-get update && apt-get install -y \
-    python3 \
-    make \
-    g++ \
-    git \
-    && rm -rf /var/lib/apt/lists/*
-
+# NodeJS app lives here
 WORKDIR /app
 
-# Copy package files first for better caching
-COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
-COPY packages/graphs/package.json ./packages/graphs/
-COPY packages/web/package.json ./packages/web/
-COPY packages/webrtc/package.json ./packages/webrtc/
+# Set production environment
+ENV NODE_ENV=production
+
+# Throw-away build stage to reduce size of final image
+FROM base AS build
+
+# Install packages needed to build node modules
+RUN apt-get update -qq && \
+    apt-get install -y python-is-python3 pkg-config build-essential git
+
+# Copy package files for all workspaces
+COPY --link package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+COPY --link packages/graphs/package.json ./packages/graphs/
+COPY --link packages/web/package.json ./packages/web/
+COPY --link packages/webrtc/package.json ./packages/webrtc/
 
 # Install dependencies
 RUN pnpm install --frozen-lockfile
 
-# Copy source code
-COPY . .
+# Copy application code
+COPY --link . .
 
-# Build all packages
+# Build application
 RUN pnpm run build
 
-# Production stage
-FROM node:20-slim AS runner
+# Final stage for app image
+FROM base AS runner
 
 # Install runtime dependencies for native modules
-RUN apt-get update && apt-get install -y \
-    python3 \
-    make \
-    g++ \
-    # Required for WebRTC
-    libglib2.0-0 \
-    libsm6 \
-    libxrender1 \
-    libxext6 \
-    && rm -rf /var/lib/apt/lists/*
-
-# Install pnpm
-RUN corepack enable && corepack prepare pnpm@10.22.0 --activate
-
-WORKDIR /app
+RUN apt-get update -qq && \
+    apt-get install -y python-is-python3 pkg-config build-essential && \
+    rm -rf /var/lib/apt/lists/*
 
 # Copy package files
-COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
-COPY packages/graphs/package.json ./packages/graphs/
-COPY packages/web/package.json ./packages/web/
-COPY packages/webrtc/package.json ./packages/webrtc/
+COPY --link package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+COPY --link packages/graphs/package.json ./packages/graphs/
+COPY --link packages/web/package.json ./packages/web/
+COPY --link packages/webrtc/package.json ./packages/webrtc/
 
-# Install production dependencies only
-RUN pnpm install --frozen-lockfile --prod=false
+# Install production dependencies
+RUN pnpm install --frozen-lockfile
 
-# Copy built files and source (needed for tsx runtime)
-COPY --from=builder /app/packages ./packages
-
-# Expose ports:
-# - 3001: HTTP/WebSocket server (signaling + static files)
-# - 10000-10100: UDP ports for WebRTC ICE traffic
-EXPOSE 3001
-EXPOSE 10000-10100/udp
+# Copy built application
+COPY --from=build /app/packages ./packages
 
 # Set working directory to webrtc package
 WORKDIR /app/packages/webrtc
 
-# Start the WebRTC server
-CMD ["pnpm", "run", "server"]
+# Expose port
+EXPOSE 3001
+
+# Start the server
+CMD [ "pnpm", "run", "server" ]
