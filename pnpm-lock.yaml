@@ -48,6 +48,106 @@ importers:
         specifier: ^3.0.6
         version: 3.2.4(@types/node@24.10.1)(lightningcss@1.30.2)(tsx@4.20.6)
 
+  packages/assemblyai:
+    dependencies:
+      '@voice-sandwich-demo/core':
+        specifier: workspace:*
+        version: link:../core
+      ws:
+        specifier: ^8.18.3
+        version: 8.18.3
+    devDependencies:
+      '@types/node':
+        specifier: ^24.10.1
+        version: 24.10.1
+      '@types/ws':
+        specifier: ^8.18.1
+        version: 8.18.1
+      typescript:
+        specifier: ~5.9.3
+        version: 5.9.3
+
+  packages/core:
+    dependencies:
+      '@langchain/core':
+        specifier: ^1.0.6
+        version: 1.0.6(openai@6.9.1(ws@8.18.3)(zod@4.1.12))
+      '@langchain/langgraph':
+        specifier: ^1.0.2
+        version: 1.0.2(@langchain/core@1.0.6(openai@6.9.1(ws@8.18.3)(zod@4.1.12)))(react-dom@19.2.0(react@19.2.0))(react@19.2.0)(zod@4.1.12)
+      langchain:
+        specifier: ^1.0.6
+        version: 1.0.6(@langchain/core@1.0.6(openai@6.9.1(ws@8.18.3)(zod@4.1.12)))(openai@6.9.1(ws@8.18.3)(zod@4.1.12))(react-dom@19.2.0(react@19.2.0))(react@19.2.0)
+    devDependencies:
+      '@types/node':
+        specifier: ^24.10.1
+        version: 24.10.1
+      typescript:
+        specifier: ~5.9.3
+        version: 5.9.3
+
+  packages/demo:
+    dependencies:
+      '@hono/node-server':
+        specifier: ^1.19.6
+        version: 1.19.6(hono@4.10.6)
+      '@hono/node-ws':
+        specifier: ^1.2.0
+        version: 1.2.0(@hono/node-server@1.19.6(hono@4.10.6))(hono@4.10.6)
+      '@langchain/google-genai':
+        specifier: ^1.0.3
+        version: 1.0.3(@langchain/core@1.0.6(openai@6.9.1(ws@8.18.3)(zod@4.1.12)))
+      '@langchain/langgraph':
+        specifier: ^1.0.2
+        version: 1.0.2(@langchain/core@1.0.6(openai@6.9.1(ws@8.18.3)(zod@4.1.12)))(react-dom@19.2.0(react@19.2.0))(react@19.2.0)(zod@4.1.12)
+      '@roamhq/wrtc':
+        specifier: ^0.9.1
+        version: 0.9.1
+      '@voice-sandwich-demo/assemblyai':
+        specifier: workspace:*
+        version: link:../assemblyai
+      '@voice-sandwich-demo/core':
+        specifier: workspace:*
+        version: link:../core
+      '@voice-sandwich-demo/elevenlabs':
+        specifier: workspace:*
+        version: link:../elevenlabs
+      dotenv:
+        specifier: ^17.2.3
+        version: 17.2.3
+      hono:
+        specifier: ^4.10.6
+        version: 4.10.6
+      langchain:
+        specifier: ^1.0.6
+        version: 1.0.6(@langchain/core@1.0.6(openai@6.9.1(ws@8.18.3)(zod@4.1.12)))(openai@6.9.1(ws@8.18.3)(zod@4.1.12))(react-dom@19.2.0(react@19.2.0))(react@19.2.0)
+      zod:
+        specifier: ^4.1.12
+        version: 4.1.12
+    devDependencies:
+      '@types/node':
+        specifier: ^24.10.1
+        version: 24.10.1
+      tsx:
+        specifier: ^4.20.6
+        version: 4.20.6
+      typescript:
+        specifier: ~5.9.3
+        version: 5.9.3
+
+  packages/elevenlabs:
+    dependencies:
+      '@voice-sandwich-demo/core':
+        specifier: workspace:*
+        version: link:../core
+    devDependencies:
+      '@types/node':
+        specifier: ^24.10.1
+        version: 24.10.1
+      typescript:
+        specifier: ~5.9.3
+        version: 5.9.3
+
   packages/graphs:
     dependencies:
       '@langchain/core':
@@ -98,6 +198,41 @@ importers:
       zod:
         specifier: ^4.1.12
         version: 4.1.12
+
+  packages/hume:
+    dependencies:
+      '@voice-sandwich-demo/core':
+        specifier: workspace:*
+        version: link:../core
+      ws:
+        specifier: ^8.18.3
+        version: 8.18.3
+    devDependencies:
+      '@types/node':
+        specifier: ^24.10.1
+        version: 24.10.1
+      '@types/ws':
+        specifier: ^8.18.1
+        version: 8.18.1
+      typescript:
+        specifier: ~5.9.3
+        version: 5.9.3
+
+  packages/openai:
+    dependencies:
+      '@voice-sandwich-demo/core':
+        specifier: workspace:*
+        version: link:../core
+      openai:
+        specifier: ^6.9.1
+        version: 6.9.1(ws@8.18.3)(zod@4.1.12)
+    devDependencies:
+      '@types/node':
+        specifier: ^24.10.1
+        version: 24.10.1
+      typescript:
+        specifier: ~5.9.3
+        version: 5.9.3
 
   packages/web:
     dependencies:
