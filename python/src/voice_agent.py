@@ -1,10 +1,14 @@
 from time import sleep
 from typing import Any, Iterator
+
+from dotenv import load_dotenv
 from typing_extensions import AsyncIterator
-from langchain_core.runnables import RunnableGenerator
+from langchain_core.runnables import RunnableGenerator, RunnableLambda
 from langchain_core.messages import AIMessage
 from langchain.agents import create_agent
 
+
+load_dotenv()
 
 # this ideally should be coming from a websocket or something else
 # that is streaming data
@@ -38,10 +42,26 @@ async def _buffer_stream(input: AsyncIterator[str]) -> AsyncIterator[str]:
 
 # this is where we would call openai/11labs/etc. to transcribe the stream
 # (imagine the input is an audio buffer)
-async def _transcribe_stream(input: AsyncIterator[str]) -> AsyncIterator[dict]:
-    async for token in input:
-        print(f"got token {token}")
-        yield {"messages": [AIMessage(content=token)]}
+async def _transcribe_stream(input: AsyncIterator[str]) -> AsyncIterator[str]:
+    transcribed = "".join([token for token in input])
+    yield transcribed
+
+
+agent = create_agent(
+    model="anthropic:claude-haiku-4-5",
+    tools=[],
+)
+
+
+async def _stream_agent(
+    input: AsyncIterator[tuple[AIMessage, Any]]
+) -> AsyncIterator[str]:
+    async for chunk in input:
+        input_message = {"role": "user", "content": chunk}
+        print(f"input message: {input_message}")
+        async for message, _ in agent.astream({"messages": [input_message]}, stream_mode="messages"):
+            print(message.text)
+            yield message.text
 
 
 # this is where we would call openai/11labs/etc. to generate text to speech
@@ -49,16 +69,11 @@ async def _tts_stream(input: str) -> AsyncIterator[str]:
     print(f"got input {input}")
     yield "hello"
 
-
-agent = create_agent(
-    model="openai:gpt-5", system_prompt="You are a helpful audio assistant"
-)
-
 audio_stream = (
     RunnableGenerator(_input_stream)
     | RunnableGenerator(_buffer_stream)
-    | RunnableGenerator(_transcribe_stream)
-    | agent
+    | RunnableLambda(_transcribe_stream)  # await transcription
+    | RunnableGenerator(_stream_agent)
     | RunnableGenerator(_tts_stream)
 )
 
