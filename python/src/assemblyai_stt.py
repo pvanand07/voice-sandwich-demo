@@ -249,23 +249,25 @@ async def transcribe_audio_stream(
         yield transcript
 
 
-async def microphone_and_transcribe_once(turn_number: int = 1) -> str:
+async def microphone_and_transcribe_once(turn_number: int = 1) -> tuple[str, bytes]:
     """
     Combined microphone + transcription for ONE conversation turn.
 
     Captures audio from microphone and transcribes with AssemblyAI.
-    Stops microphone when AssemblyAI sends a final transcript.
+    Stops microphone when AssemblyAI sends a final transcript while retaining
+    the captured PCM bytes for downstream consumers.
 
     Args:
         turn_number: Turn number for logging
 
     Returns:
-        Final transcribed text string
+        Tuple containing the final transcribed text (may be empty) and the
+        captured PCM bytes for the turn
 
     Example:
         ```python
-        transcript = await microphone_and_transcribe_once()
-        print(f"User said: {transcript}")
+        transcript, audio_bytes = await microphone_and_transcribe_once()
+        print(f"User said: {transcript}, captured {len(audio_bytes)} bytes")
         ```
     """
     import asyncio
@@ -290,7 +292,9 @@ async def microphone_and_transcribe_once(turn_number: int = 1) -> str:
         stt = AssemblyAISTTTransform(sample_rate=16000)
         await stt.connect()
 
-        # Background task to capture and send audio
+        captured_chunks: list[bytes] = []
+
+        # Background task to capture and send audio (while retaining raw bytes)
         async def capture_and_send():
             chunk_count = 0
             try:
@@ -298,6 +302,7 @@ async def microphone_and_transcribe_once(turn_number: int = 1) -> str:
                     audio_data = await asyncio.get_event_loop().run_in_executor(
                         None, stream.read, 1600, False
                     )
+                    captured_chunks.append(audio_data)
                     await stt.send_audio(audio_data)
                     chunk_count += 1
                     if chunk_count % 50 == 0:
@@ -325,13 +330,15 @@ async def microphone_and_transcribe_once(turn_number: int = 1) -> str:
         await stt.terminate()
         await stt.close()
 
-        # Return the final transcript
+        audio_bytes = b"".join(captured_chunks)
+
+        # Return the final transcript + full PCM payload
         if transcripts:
             final_transcription = " ".join(transcripts)
             print(f"[DEBUG] Returning final: {final_transcription}")
-            return final_transcription
+            return final_transcription, audio_bytes
 
-        return ""
+        return "", audio_bytes
 
     finally:
         # Clean up microphone

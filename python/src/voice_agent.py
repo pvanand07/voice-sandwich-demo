@@ -1,17 +1,42 @@
-from typing import Any, Awaitable, Callable
 import asyncio
+import base64
+import io
+from typing import Any, Awaitable, Callable
+import wave
 
 from dotenv import load_dotenv
 from typing_extensions import AsyncIterator
 from langchain_core.runnables import RunnableGenerator, Runnable
 from langchain.agents import create_agent
-from langchain.messages import AIMessage
+from langchain.messages import AIMessage, HumanMessage
 import pyaudio
 
 from assemblyai_stt import microphone_and_transcribe_once
 from elevenlabs_tts import text_to_speech_stream
 
 load_dotenv()
+
+def _bytes_to_base64(data: bytes) -> str:
+    """Encode bytes to a Base64 string (ASCII)."""
+    return base64.b64encode(data).decode("ascii")
+
+
+def _pcm16le_to_wav_bytes(
+    audio_bytes: bytes,
+    sample_rate: int = 16000,
+    channels: int = 1,
+) -> bytes:
+    """Wrap raw PCM16LE audio in a WAV container."""
+    if not audio_bytes:
+        return b""
+
+    buffer = io.BytesIO()
+    with wave.open(buffer, "wb") as wav_file:
+        wav_file.setnchannels(channels)
+        wav_file.setsampwidth(2)  # 16-bit samples
+        wav_file.setframerate(sample_rate)
+        wav_file.writeframes(audio_bytes)
+    return buffer.getvalue()
 
 
 def get_weather(location: str) -> str:
@@ -28,12 +53,12 @@ agent = create_agent(
 )
 
 
-async def _play_tts_from_text(text: str) -> None:
-    """Stream ElevenLabs audio until completion."""
+async def _play_tts_from_text(text: str) -> bytes:
+    """Stream ElevenLabs audio until completion and return the PCM bytes."""
     stripped = text.strip()
     if not stripped:
         print("[DEBUG] _play_tts_from_text: Empty response, skipping TTS")
-        return
+        return b""
 
     async def agent_text_stream():
         yield stripped
@@ -50,9 +75,11 @@ async def _play_tts_from_text(text: str) -> None:
     )
 
     loop = asyncio.get_event_loop()
+    captured_chunks: list[bytes] = []
 
     try:
         async for audio_chunk in audio_generator:
+            captured_chunks.append(audio_chunk)
             await loop.run_in_executor(None, audio_stream.write, audio_chunk)
         print("[DEBUG] _play_tts_from_text: Playback complete")
     finally:
@@ -60,9 +87,11 @@ async def _play_tts_from_text(text: str) -> None:
         audio_stream.close()
         p.terminate()
 
+    return b"".join(captured_chunks)
 
-TranscribeFn = Callable[[int], Awaitable[str]]
-TTSFn = Callable[[str], Awaitable[None]]
+
+TranscribeFn = Callable[[int], Awaitable[tuple[str, bytes]]]
+TTSFn = Callable[[str], Awaitable[bytes]]
 
 
 class VoicePipeline:
@@ -96,12 +125,15 @@ class VoicePipeline:
     ) -> AsyncIterator[dict[str, Any]]:
         """
         Capture a single conversational turn from the microphone/STT layer.
+
+        Returns both the transcript text and the raw audio bytes captured for
+        that turn so downstream components can inspect or persist the audio.
         """
         async for _ in sentinel_stream:
             self.turn_number += 1
             turn = self.turn_number
             try:
-                transcript = await self.transcribe_fn(turn)
+                transcript, audio_bytes = await self.transcribe_fn(turn)
             except Exception as exc:  # pragma: no cover - defensive logging
                 print(f"[DEBUG] STT error: {exc}")
                 continue
@@ -110,7 +142,18 @@ class VoicePipeline:
                 print("[DEBUG] _transcribe_stream: Empty transcript, skipping turn")
                 continue
 
-            yield {"turn": turn, "transcript": transcript}
+            wav_bytes = _pcm16le_to_wav_bytes(audio_bytes)
+            wav_base64 = _bytes_to_base64(wav_bytes)
+            yield HumanMessage(
+                content_blocks=[
+                    {
+                        "type": "audio",
+                        "base64": wav_base64,
+                        "mime_type": "audio/wav",
+                    },
+                ],
+                response_metadata={"turn": turn, "transcript": transcript},
+            )
 
     async def _agent_stream(
         self, transcript_stream: AsyncIterator[dict[str, Any]]
@@ -119,8 +162,8 @@ class VoicePipeline:
         Pass transcripts to the LangChain agent and emit full responses.
         """
         async for payload in transcript_stream:
-            transcript = payload["transcript"]
-            turn = payload["turn"]
+            transcript = payload.response_metadata["transcript"]
+            turn = payload.response_metadata["turn"]
 
             print(f"\n[User {turn}]: {transcript}")
             print("[Agent]: ", end="", flush=True)
@@ -145,16 +188,32 @@ class VoicePipeline:
 
     async def _tts_stream(
         self, response_stream: AsyncIterator[dict[str, Any]]
-    ) -> AsyncIterator[dict[str, Any]]:
+    ) -> AsyncIterator[AIMessage]:
         """
-        Convert agent text responses to speech sequentially.
+        Convert agent text responses to speech sequentially and emit AI messages
+        that include the synthesized audio as a WAV/base64 block.
         """
         async for payload in response_stream:
             response_text = payload["response_text"]
             turn = payload["turn"]
 
-            await self.tts_fn(response_text)
-            yield {"turn": turn, "status": "tts_complete"}
+            pcm_bytes = await self.tts_fn(response_text)
+            wav_bytes = _pcm16le_to_wav_bytes(pcm_bytes)
+            wav_base64 = _bytes_to_base64(wav_bytes)
+
+            yield AIMessage(
+                content_blocks=[
+                    {
+                        "type": "audio",
+                        "base64": wav_base64,
+                        "mime_type": "audio/wav",
+                    }
+                ],
+                response_metadata={
+                    "turn": turn,
+                    "response_text": response_text,
+                },
+            )
 
     async def run(self) -> None:
         """Drive the LCEL pipeline turn by turn."""
@@ -165,7 +224,7 @@ class VoicePipeline:
                     yield None
 
                 async for output in self.audio_stream.astream(sentinel_driver()):
-                    print(f"[DEBUG] VoicePipeline.run: pipeline output {output}")
+                    print(f"[DEBUG] VoicePipeline.run: pipeline output {output.response_metadata}")
         except KeyboardInterrupt:
             raise
         except Exception as exc:  # pragma: no cover - defensive logging
