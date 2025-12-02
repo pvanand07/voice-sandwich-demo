@@ -1,7 +1,8 @@
 import asyncio
 import base64
+import contextlib
 import io
-from typing import Any, Awaitable, Callable
+from typing import Any, Awaitable, Callable, Optional
 import wave
 
 from dotenv import load_dotenv
@@ -12,7 +13,7 @@ from langchain.messages import AIMessage, HumanMessage
 from langgraph.checkpoint.memory import InMemorySaver
 import pyaudio
 
-from assemblyai_stt import microphone_and_transcribe_once
+from assemblyai_stt import AssemblyAISTTTransform
 from elevenlabs_tts import text_to_speech_stream
 
 load_dotenv()
@@ -94,8 +95,40 @@ async def _play_tts_from_text(text: str) -> bytes:
     return b"".join(captured_chunks)
 
 
-TranscribeFn = Callable[[int], Awaitable[tuple[str, bytes]]]
+async def microphone_audio_stream(
+    chunk_size: int = 1600,
+    sample_rate: int = 16000,
+    channels: int = 1,
+) -> AsyncIterator[bytes]:
+    """Continuously yield raw PCM audio from the default microphone."""
+    p = pyaudio.PyAudio()
+    stream = p.open(
+        format=pyaudio.paInt16,
+        channels=channels,
+        rate=sample_rate,
+        input=True,
+        frames_per_buffer=chunk_size,
+    )
+
+    loop = asyncio.get_event_loop()
+
+    try:
+        while True:
+            audio_data = await loop.run_in_executor(
+                None, stream.read, chunk_size, False
+            )
+            yield audio_data
+    except asyncio.CancelledError:
+        raise
+    finally:
+        stream.stop_stream()
+        stream.close()
+        p.terminate()
+
+
 TTSFn = Callable[[str], Awaitable[bytes]]
+STTFactory = Callable[[], AssemblyAISTTTransform]
+AudioStream = AsyncIterator[bytes]
 
 
 class VoicePipeline:
@@ -110,57 +143,94 @@ class VoicePipeline:
     def __init__(
         self,
         agent_runnable: Runnable,
-        transcribe_fn: TranscribeFn = microphone_and_transcribe_once,
         tts_fn: TTSFn = _play_tts_from_text,
+        stt_factory: Optional[STTFactory] = None,
+        sample_rate: int = 16000,
     ) -> None:
         self.agent = agent_runnable
-        self.transcribe_fn = transcribe_fn
         self.tts_fn = tts_fn
+        self.sample_rate = sample_rate
+        self.stt_factory = stt_factory or (
+            lambda: AssemblyAISTTTransform(sample_rate=self.sample_rate)
+        )
         self.turn_number = 0
 
         self.audio_stream = (
-            RunnableGenerator(self._transcribe_stream)
+            RunnableGenerator(self._buffer_and_transcribe)
             | RunnableGenerator(self._agent_stream)
             | RunnableGenerator(self._tts_stream)
         )
 
-    async def _transcribe_stream(
-        self, sentinel_stream: AsyncIterator[Any]
-    ) -> AsyncIterator[dict[str, Any]]:
+    async def _buffer_and_transcribe(
+        self, audio_stream: AudioStream
+    ) -> AsyncIterator[HumanMessage]:
         """
-        Capture a single conversational turn from the microphone/STT layer.
+        Buffer microphone audio, stream it to AssemblyAI, and emit turns.
 
-        Returns both the transcript text and the raw audio bytes captured for
-        that turn so downstream components can inspect or persist the audio.
+        AssemblyAI's built-in VAD determines utterance boundaries. Whenever a
+        formatted transcript arrives, the buffered PCM for that window is
+        wrapped into a WAV audio block and yielded as a HumanMessage.
         """
-        async for _ in sentinel_stream:
-            self.turn_number += 1
-            turn = self.turn_number
+        stt = self.stt_factory()
+        await stt.connect()
+
+        buffer_lock = asyncio.Lock()
+        current_audio = bytearray()
+
+        async def pump_audio() -> None:
             try:
-                transcript, audio_bytes = await self.transcribe_fn(turn)
+                async for chunk in audio_stream:
+                    if not chunk:
+                        continue
+                    async with buffer_lock:
+                        current_audio.extend(chunk)
+                    await stt.send_audio(chunk)
+            except asyncio.CancelledError:
+                raise
             except Exception as exc:  # pragma: no cover - defensive logging
-                print(f"[DEBUG] STT error: {exc}")
-                continue
+                print(f"[DEBUG] pump_audio error: {exc}")
+            finally:
+                await stt.terminate()
 
-            if not transcript:
-                print("[DEBUG] _transcribe_stream: Empty transcript, skipping turn")
-                continue
+        send_task = asyncio.create_task(pump_audio())
 
-            wav_bytes = _pcm16le_to_wav_bytes(audio_bytes)
-            wav_base64 = _bytes_to_base64(wav_bytes)
-            yield HumanMessage(
-                content_blocks=[
-                    {
-                        "type": "audio",
-                        "base64": wav_base64,
-                        "mime_type": "audio/wav",
-                    },
-                ],
-                response_metadata={"turn": turn, "transcript": transcript},
-            )
+        try:
+            async for transcript in stt._receive_messages():
+                if not transcript:
+                    continue
+
+                async with buffer_lock:
+                    turn_audio = bytes(current_audio)
+                    current_audio.clear()
+
+                if not turn_audio:
+                    print("[DEBUG] _buffer_and_transcribe: Empty audio, skipping turn")
+                    continue
+
+                self.turn_number += 1
+                turn = self.turn_number
+
+                wav_bytes = _pcm16le_to_wav_bytes(turn_audio, sample_rate=self.sample_rate)
+                wav_base64 = _bytes_to_base64(wav_bytes)
+
+                yield HumanMessage(
+                    content_blocks=[
+                        {
+                            "type": "audio",
+                            "base64": wav_base64,
+                            "mime_type": "audio/wav",
+                        },
+                    ],
+                    response_metadata={"turn": turn, "transcript": transcript},
+                )
+        finally:
+            send_task.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await send_task
+            await stt.close()
 
     async def _agent_stream(
-        self, transcript_stream: AsyncIterator[dict[str, Any]]
+        self, transcript_stream: AsyncIterator[HumanMessage]
     ) -> AsyncIterator[dict[str, Any]]:
         """
         Pass transcripts to the LangChain agent and emit full responses.
@@ -203,7 +273,9 @@ class VoicePipeline:
             turn = payload["turn"]
 
             pcm_bytes = await self.tts_fn(response_text)
-            wav_bytes = _pcm16le_to_wav_bytes(pcm_bytes)
+            wav_bytes = _pcm16le_to_wav_bytes(
+                pcm_bytes, sample_rate=self.sample_rate
+            )
             wav_base64 = _bytes_to_base64(wav_bytes)
 
             yield AIMessage(
@@ -220,25 +292,19 @@ class VoicePipeline:
                 },
             )
 
-    async def run(self) -> None:
-        """Drive the LCEL pipeline turn by turn."""
+    async def run(self, audio_stream: AudioStream) -> None:
+        """Drive the LCEL pipeline for the provided audio stream."""
 
+        last_output: Any = None
         try:
-            while True:
-                async def sentinel_driver() -> AsyncIterator[None]:
-                    yield None
-
-                async for output in self.audio_stream.astream(sentinel_driver()):
-                    print(f"[DEBUG] VoicePipeline.run: pipeline output {output.response_metadata}")
+            async for output in self.audio_stream.atransform(audio_stream):
+                last_output = output
+                print(f"[DEBUG] VoicePipeline.run: pipeline output {output}")
         except KeyboardInterrupt:
             raise
         except Exception as exc:  # pragma: no cover - defensive logging
             print(f"[DEBUG] VoicePipeline.run: pipeline error: {exc}")
-            print(f"[DEBUG] VoicePipeline.run: pipeline output {output}")
-        except KeyboardInterrupt:
-            raise
-        except Exception as exc:  # pragma: no cover - defensive logging
-            print(f"[DEBUG] VoicePipeline.run: pipeline error: {exc}")
+            print(f"[DEBUG] VoicePipeline.run: last output {last_output}")
 
 
 async def main():
@@ -254,15 +320,20 @@ async def main():
     print("Speak into your microphone. Press Ctrl+C to stop.\n")
 
     voice_pipeline = VoicePipeline(agent)
+    audio_stream = microphone_audio_stream(
+        chunk_size=1600, sample_rate=voice_pipeline.sample_rate
+    )
 
     try:
-        await voice_pipeline.run()
+        await voice_pipeline.run(audio_stream)
     except KeyboardInterrupt:
         print("\n\nStopping pipeline...")
     except Exception as e:
         print(f"[DEBUG] main: Error occurred: {e}")
         import traceback
         traceback.print_exc()
+    finally:
+        await audio_stream.aclose()
 
 
 if __name__ == "__main__":
