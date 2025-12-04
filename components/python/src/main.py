@@ -214,11 +214,10 @@ async def _tts_stream(response_stream: AsyncIterator[str]) -> AsyncIterator[byte
         await tts.close()
 
 
-# Define the voice processing pipeline as a chain of async generators
 pipeline = (
-    RunnableGenerator(_stt_stream)
-    | RunnableGenerator(_agent_stream)
-    | RunnableGenerator(_tts_stream)
+    RunnableGenerator(_stt_stream)  # Audio -> Transcripts
+    | RunnableGenerator(_agent_stream)  # Transcripts -> Agent Responses
+    | RunnableGenerator(_tts_stream)  # Agent Responses -> Audio
 )
 
 
