@@ -27,6 +27,11 @@ class AssemblyAISTT:
         api_key: Optional[str] = None,
         sample_rate: int = 16000,
         format_turns: bool = True,
+        end_of_turn_confidence_threshold: float = 0.7,
+        min_end_of_turn_silence_when_confident: int = 160,
+        max_turn_silence: int = 2400,
+        keyterms_prompt: Optional[list] = None,
+        language: str = "en",
     ):
         self.api_key = api_key or os.getenv("ASSEMBLYAI_API_KEY")
         if not self.api_key:
@@ -34,6 +39,11 @@ class AssemblyAISTT:
 
         self.sample_rate = sample_rate
         self.format_turns = format_turns
+        self.end_of_turn_confidence_threshold = end_of_turn_confidence_threshold
+        self.min_end_of_turn_silence_when_confident = min_end_of_turn_silence_when_confident
+        self.max_turn_silence = max_turn_silence
+        self.keyterms_prompt = keyterms_prompt or []
+        self.language = language
         self._ws: Optional[WebSocketClientProtocol] = None
         self._connection_signal = asyncio.Event()
         self._close_signal = asyncio.Event()
@@ -108,12 +118,20 @@ class AssemblyAISTT:
         if self._ws and self._ws.close_code is None:
             return self._ws
 
-        params = urlencode(
-            {
-                "sample_rate": self.sample_rate,
-                "format_turns": str(self.format_turns).lower(),
-            }
-        )
+        connection_params = {
+            "sample_rate": self.sample_rate,
+            "format_turns": str(self.format_turns).lower(),
+            "end_of_turn_confidence_threshold": self.end_of_turn_confidence_threshold,
+            "min_end_of_turn_silence_when_confident": self.min_end_of_turn_silence_when_confident,
+            "max_turn_silence": self.max_turn_silence,
+            "language": self.language,
+        }
+        
+        # Handle keyterms_prompt list - encode as JSON string if not empty
+        if self.keyterms_prompt:
+            connection_params["keyterms_prompt"] = json.dumps(self.keyterms_prompt)
+        
+        params = urlencode(connection_params)
         url = f"wss://streaming.assemblyai.com/v3/ws?{params}"
         self._ws = await websockets.connect(
             url, additional_headers={"Authorization": self.api_key}
