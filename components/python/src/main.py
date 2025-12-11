@@ -1,5 +1,6 @@
 import asyncio
 import contextlib
+import os
 from pathlib import Path
 from typing import AsyncIterator
 from uuid import uuid4
@@ -13,9 +14,11 @@ from langchain.messages import AIMessage, HumanMessage, ToolMessage
 from langchain_core.runnables import RunnableGenerator
 from langgraph.checkpoint.memory import InMemorySaver
 from starlette.staticfiles import StaticFiles
+from starlette.websockets import WebSocketDisconnect
+from langchain_openai import ChatOpenAI
 
 from assemblyai_stt import AssemblyAISTT
-from components.python.src.cartesia_tts import CartesiaTTS
+from cartesia_tts import CartesiaTTS
 from events import (
     AgentChunkEvent,
     AgentEndEvent,
@@ -69,8 +72,19 @@ Available cheeses: swiss, cheddar, provolone.
 ${CARTESIA_TTS_SYSTEM_PROMPT}
 """
 
+DEFAULT_MODEL_CONFIG = {
+    "model": "openai/gpt-4.1",
+    "streaming": True,
+    "temperature": 0.1,
+    "base_url": "https://openrouter.ai/api/v1",
+    "api_key": os.getenv("OPENROUTER_API_KEY", ""),
+    "extra_body": {"transforms": ["middle-out"], "models":["google/gemini-2.5-pro"], "usage": {"include": True}}
+}
+
+model = ChatOpenAI(**DEFAULT_MODEL_CONFIG)
+
 agent = create_agent(
-    model="anthropic:claude-haiku-4-5",
+    model=model,
     tools=[add_to_order, confirm_order],
     system_prompt=system_prompt,
     checkpointer=InMemorySaver(),
@@ -181,7 +195,7 @@ async def _agent_stream(
 
             # Iterate through the agent's streaming response. The stream yields
             # tuples of (message, metadata), but we only need the message.
-            async for message, metadata in stream:
+            async for message, _ in stream:
                 # Emit agent chunks (AI messages)
                 if isinstance(message, AIMessage):
                     # Extract and yield the text content from each message chunk
@@ -281,9 +295,13 @@ async def websocket_endpoint(websocket: WebSocket):
 
     async def websocket_audio_stream() -> AsyncIterator[bytes]:
         """Async generator that yields audio bytes from the websocket."""
-        while True:
-            data = await websocket.receive_bytes()
-            yield data
+        try:
+            while True:
+                data = await websocket.receive_bytes()
+                yield data
+        except WebSocketDisconnect:
+            # Client disconnected, gracefully exit the generator
+            return
 
     output_stream = pipeline.atransform(websocket_audio_stream())
 
