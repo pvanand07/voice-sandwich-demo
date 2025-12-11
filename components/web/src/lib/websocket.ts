@@ -103,10 +103,9 @@ export function createVoiceSession(): VoiceSession {
 
     session.setStatus("connecting");
 
-    // Connect WebSocket. Allow override for deployments where the API lives on
-    // a different host than the static assets.
-    // Hardcoded deployment URL for backend WebSocket
-    const wsUrl = "wss://langchain-voice.elevatics.site/ws";
+    // Connect WebSocket. Get URL from browser and convert to WebSocket protocol
+    const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+    const wsUrl = `${protocol}//${window.location.host}/ws`;
     ws = new WebSocket(wsUrl);
     ws.binaryType = "arraybuffer";
 

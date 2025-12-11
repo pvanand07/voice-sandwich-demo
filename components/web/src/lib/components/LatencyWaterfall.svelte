@@ -87,60 +87,64 @@
   });
 </script>
 
-<div class="mt-5 pt-5 border-t border-gray-700">
+<div class="mt-6 pt-6 border-t border-slate-700/50">
   <!-- Header -->
-  <div class="flex items-center gap-2 mb-4">
-    <span class="text-xs">⏱</span>
-    <span class="text-[11px] font-semibold uppercase tracking-wider text-gray-500">Latency Waterfall</span>
-    <span class="ml-auto font-mono text-sm font-semibold text-cyan-400">{totalLatencyDisplay}</span>
+  <div class="flex items-center gap-2.5 mb-5">
+    <div class="w-6 h-6 rounded-md bg-amber-500/15 flex items-center justify-center">
+      <svg class="w-3.5 h-3.5 text-amber-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <circle cx="12" cy="12" r="10"></circle>
+        <polyline points="12 6 12 12 16 14"></polyline>
+      </svg>
+    </div>
+    <span class="text-xs font-semibold uppercase tracking-widest text-slate-400">Latency Analysis</span>
+    <span class="ml-auto font-mono text-sm font-bold text-emerald-400">{totalLatencyDisplay}</span>
   </div>
 
   <!-- Waterfall Bars -->
-  <div class="mb-4">
+  <div class="mb-5">
     {#if bars}
       {#each [
-        { label: 'STT', bar: bars.stt, gradient: 'from-cyan-400 to-emerald-500' },
-        { label: 'Agent', bar: bars.agent, gradient: 'from-purple-500 to-violet-600' },
-        { label: 'TTS', bar: bars.tts, gradient: 'from-orange-500 to-orange-600' },
+        { label: 'STT', bar: bars.stt, gradient: 'from-emerald-400 to-teal-500' },
+        { label: 'Agent', bar: bars.agent, gradient: 'from-violet-500 to-purple-600' },
+        { label: 'TTS', bar: bars.tts, gradient: 'from-amber-400 to-orange-500' },
       ] as row}
-        <div class="flex items-center mb-2">
-          <div class="w-12 flex-shrink-0 text-[10px] font-semibold uppercase tracking-wider text-gray-500">
+        <div class="flex items-center mb-2.5">
+          <div class="w-14 flex-shrink-0 text-[10px] font-semibold uppercase tracking-widest text-slate-500">
             {row.label}
           </div>
-          <div class="flex-1 h-5 bg-[#252530] rounded relative overflow-hidden">
+          <div class="flex-1 h-6 bg-slate-800/80 rounded-md relative overflow-hidden border border-slate-700/30">
             <div
-              class="absolute h-full rounded bg-gradient-to-r {row.gradient} min-w-0.5"
+              class="absolute h-full rounded-md bg-gradient-to-r {row.gradient} min-w-0.5 transition-all duration-150"
               style="left: {row.bar.style.left}; width: {row.bar.style.width}; opacity: {row.bar.style.opacity}"
             ></div>
           </div>
-          <div class="w-14 flex-shrink-0 text-right font-mono text-[10px] text-gray-600 pl-2.5">
+          <div class="w-16 flex-shrink-0 text-right font-mono text-xs text-slate-400 pl-3">
             {row.bar.duration}
           </div>
         </div>
       {/each}
     {:else}
-      <div class="text-center py-4 text-gray-600 text-xs">Latency data will appear here</div>
+      <div class="text-center py-6 text-slate-500 text-sm">Latency metrics will appear here during research</div>
     {/if}
   </div>
 
   <!-- Stats Row -->
-  <div class="flex justify-between gap-2 pt-3 border-t border-gray-700">
-    <div class="flex flex-col items-center gap-1">
-      <span class="text-[9px] font-semibold uppercase tracking-wider text-gray-600">Turns</span>
-      <span class="font-mono text-sm text-gray-500">{$latencyStats.turns}</span>
+  <div class="grid grid-cols-4 gap-3 pt-4 border-t border-slate-700/50">
+    <div class="flex flex-col items-center gap-1.5 py-2 px-3 bg-slate-800/40 rounded-lg">
+      <span class="text-[9px] font-semibold uppercase tracking-widest text-slate-500">Queries</span>
+      <span class="font-mono text-base font-bold text-slate-300">{$latencyStats.turns}</span>
     </div>
-    <div class="flex flex-col items-center gap-1">
-      <span class="text-[9px] font-semibold uppercase tracking-wider text-gray-600">Avg Total</span>
-      <span class="font-mono text-sm text-gray-500">{$computedStats.avg ? formatDuration($computedStats.avg) : '—'}</span>
+    <div class="flex flex-col items-center gap-1.5 py-2 px-3 bg-slate-800/40 rounded-lg">
+      <span class="text-[9px] font-semibold uppercase tracking-widest text-slate-500">Avg</span>
+      <span class="font-mono text-base font-bold text-slate-300">{$computedStats.avg ? formatDuration($computedStats.avg) : '—'}</span>
     </div>
-    <div class="flex flex-col items-center gap-1">
-      <span class="text-[9px] font-semibold uppercase tracking-wider text-gray-600">Min</span>
-      <span class="font-mono text-sm text-gray-500">{$computedStats.min ? formatDuration($computedStats.min) : '—'}</span>
+    <div class="flex flex-col items-center gap-1.5 py-2 px-3 bg-slate-800/40 rounded-lg">
+      <span class="text-[9px] font-semibold uppercase tracking-widest text-slate-500">Min</span>
+      <span class="font-mono text-base font-bold text-emerald-400">{$computedStats.min ? formatDuration($computedStats.min) : '—'}</span>
     </div>
-    <div class="flex flex-col items-center gap-1">
-      <span class="text-[9px] font-semibold uppercase tracking-wider text-gray-600">Max</span>
-      <span class="font-mono text-sm text-gray-500">{$computedStats.max ? formatDuration($computedStats.max) : '—'}</span>
+    <div class="flex flex-col items-center gap-1.5 py-2 px-3 bg-slate-800/40 rounded-lg">
+      <span class="text-[9px] font-semibold uppercase tracking-widest text-slate-500">Max</span>
+      <span class="font-mono text-base font-bold text-amber-400">{$computedStats.max ? formatDuration($computedStats.max) : '—'}</span>
     </div>
   </div>
 </div>
-

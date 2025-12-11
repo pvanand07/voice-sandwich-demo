@@ -9,44 +9,58 @@
     tool: '🔧',
   };
 
-  const colorMap: Record<string, { bg: string; label: string }> = {
-    stt: { bg: 'bg-cyan-400/10', label: 'text-cyan-400' },
-    agent: { bg: 'bg-purple-500/10', label: 'text-purple-500' },
-    tts: { bg: 'bg-orange-500/10', label: 'text-orange-500' },
-    tool: { bg: 'bg-blue-500/10', label: 'text-blue-500' },
+  const colorMap: Record<string, { bg: string; label: string; border: string }> = {
+    stt: { bg: 'bg-emerald-500/10', label: 'text-emerald-400', border: 'border-emerald-500/20' },
+    agent: { bg: 'bg-violet-500/10', label: 'text-violet-400', border: 'border-violet-500/20' },
+    tts: { bg: 'bg-amber-500/10', label: 'text-amber-400', border: 'border-amber-500/20' },
+    tool: { bg: 'bg-blue-500/10', label: 'text-blue-400', border: 'border-blue-500/20' },
   };
 </script>
 
-<div class="bg-white rounded-2xl p-6 mb-5 border border-gray-200">
-  <div class="flex items-center justify-between mb-4">
-    <span class="text-[11px] font-semibold uppercase tracking-wider text-gray-500">Activity</span>
+<div class="glass rounded-2xl p-6 mb-6">
+  <div class="flex items-center justify-between mb-5">
+    <div class="flex items-center gap-2.5">
+      <div class="w-8 h-8 rounded-lg bg-emerald-500/15 flex items-center justify-center">
+        <svg class="w-4 h-4 text-emerald-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M12 20h9"></path>
+          <path d="M16.376 3.622a1 1 0 0 1 3.002 3.002L7.368 18.635a2 2 0 0 1-.855.506l-2.872.838a.5.5 0 0 1-.62-.62l.838-2.872a2 2 0 0 1 .506-.854z"></path>
+        </svg>
+      </div>
+      <span class="text-xs font-semibold uppercase tracking-widest text-slate-400">Research Activity</span>
+    </div>
     <button
       onclick={() => activities.clear()}
-      class="text-[11px] text-gray-400 hover:text-gray-600 transition-colors cursor-pointer"
+      class="text-xs text-slate-500 hover:text-slate-300 transition-colors cursor-pointer px-3 py-1.5 rounded-lg hover:bg-slate-800/60"
     >
       Clear
     </button>
   </div>
 
-  <div class="max-h-80 overflow-y-auto flex flex-col gap-2.5">
+  <div class="max-h-80 overflow-y-auto flex flex-col gap-3">
     {#if $activities.length === 0}
-      <div class="text-gray-400 text-sm py-5 text-center">No activity yet...</div>
+      <div class="text-slate-500 text-sm py-8 text-center flex flex-col items-center gap-2">
+        <svg class="w-8 h-8 text-slate-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+          <circle cx="11" cy="11" r="8"></circle>
+          <path d="m21 21-4.3-4.3"></path>
+        </svg>
+        <span>No research activity yet...</span>
+      </div>
     {:else}
       {#each $activities as item (item.id)}
-        <div class="flex items-start gap-3 p-3 bg-gray-100 rounded-xl animate-slideIn">
-          <div class="w-8 h-8 rounded-lg flex items-center justify-center text-sm flex-shrink-0 {colorMap[item.type]?.bg}">
+        <div class="flex items-start gap-3 p-4 bg-slate-800/50 rounded-xl border {colorMap[item.type]?.border || 'border-slate-700/50'} animate-slideIn">
+          <div class="w-9 h-9 rounded-lg flex items-center justify-center text-base flex-shrink-0 {colorMap[item.type]?.bg}">
             {iconMap[item.type] || '📋'}
           </div>
           <div class="flex-1 min-w-0">
-            <div class="text-[10px] font-semibold uppercase tracking-wider mb-0.5 {colorMap[item.type]?.label}">
+            <div class="text-[10px] font-semibold uppercase tracking-widest mb-1 {colorMap[item.type]?.label}">
               {item.label}
             </div>
-            <div class="text-sm text-gray-900 leading-relaxed break-words">{item.text}</div>
+            <div class="text-sm text-slate-200 leading-relaxed break-words">{item.text}</div>
             {#if item.args}
-              <pre class="mt-2 p-2 bg-black/5 rounded-md font-mono text-[11px] text-gray-600 overflow-x-auto whitespace-pre-wrap">{JSON.stringify(item.args, null, 2)}</pre>
+              <pre class="mt-2.5 p-3 bg-slate-900/60 rounded-lg font-mono text-[11px] text-slate-400 overflow-x-auto whitespace-pre-wrap border border-slate-700/30">{JSON.stringify(item.args, null, 2)}</pre>
             {/if}
-            <div class="mt-1">
-              <span class="font-mono text-[10px] text-gray-400">{formatTime(item.timestamp)}</span>
+            <div class="mt-2">
+              <span class="font-mono text-[10px] text-slate-500">{formatTime(item.timestamp)}</span>
             </div>
           </div>
         </div>
@@ -71,4 +85,3 @@
     animation: slideIn 0.3s ease-out;
   }
 </style>
-

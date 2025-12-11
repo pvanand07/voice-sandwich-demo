@@ -32,60 +32,95 @@
       : $currentTurn.ttsStartTs ? '...' : '—',
   });
 
-  function stageClasses(state: StageState, color: 'cyan' | 'purple' | 'orange'): string {
-    const colorMap = {
-      cyan: {
-        border: 'border-cyan-400',
-        active: 'bg-cyan-400/15 shadow-[0_0_16px_theme(colors.cyan.400/30)]',
-      },
-      purple: {
-        border: 'border-purple-500',
-        active: 'bg-purple-500/15 shadow-[0_0_16px_theme(colors.purple.500/30)]',
-      },
-      orange: {
-        border: 'border-orange-500',
-        active: 'bg-orange-500/15 shadow-[0_0_16px_theme(colors.orange.500/30)]',
-      },
-    };
+  type ColorTheme = 'emerald' | 'violet' | 'amber';
+  
+  const colorConfig: Record<ColorTheme, { border: string; active: string; icon: string }> = {
+    emerald: {
+      border: 'border-emerald-500/50',
+      active: 'bg-emerald-500/20 shadow-[0_0_24px_theme(colors.emerald.500/40)]',
+      icon: 'text-emerald-400',
+    },
+    violet: {
+      border: 'border-violet-500/50',
+      active: 'bg-violet-500/20 shadow-[0_0_24px_theme(colors.violet.500/40)]',
+      icon: 'text-violet-400',
+    },
+    amber: {
+      border: 'border-amber-500/50',
+      active: 'bg-amber-500/20 shadow-[0_0_24px_theme(colors.amber.500/40)]',
+      icon: 'text-amber-400',
+    },
+  };
 
-    const c = colorMap[color];
-    let classes = `w-13 h-13 rounded-xl flex items-center justify-center text-2xl
-                   bg-[#252530] border-2 ${c.border} transition-all duration-300`;
+  function stageClasses(state: StageState, color: ColorTheme): string {
+    const c = colorConfig[color];
+    let classes = `w-16 h-16 rounded-xl flex items-center justify-center
+                   bg-slate-800/80 border-2 ${c.border} transition-all duration-300`;
 
     if (state.active) {
-      classes += ` ${c.active} scale-105 animate-pulse`;
+      classes += ` ${c.active} scale-110`;
     } else if (state.complete) {
-      classes += ' opacity-70';
+      classes += ' opacity-60';
     }
 
     return classes;
   }
 </script>
 
-<div class="flex items-center justify-center gap-4 py-4">
+<div class="flex items-center justify-center gap-3 py-6">
   <!-- STT Stage -->
-  <div class="flex flex-col items-center gap-2.5">
-    <div class={stageClasses(stt, 'cyan')}>🎤</div>
-    <div class="text-[11px] font-medium uppercase tracking-wider text-gray-500">STT</div>
-    <div class="font-mono text-xs text-gray-600">{stt.time}</div>
+  <div class="flex flex-col items-center gap-3">
+    <div class={stageClasses(stt, 'emerald')}>
+      <svg class="w-7 h-7 {colorConfig.emerald.icon}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"></path>
+        <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
+        <line x1="12" x2="12" y1="19" y2="22"></line>
+      </svg>
+    </div>
+    <div class="text-[10px] font-semibold uppercase tracking-widest text-slate-500">Transcribe</div>
+    <div class="font-mono text-xs text-slate-400">{stt.time}</div>
   </div>
 
-  <div class="text-gray-600 text-lg -mt-6">→</div>
+  <!-- Arrow -->
+  <div class="flex items-center justify-center w-8 -mt-8">
+    <svg class="w-5 h-5 text-slate-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+      <path d="M5 12h14m-7-7 7 7-7 7"></path>
+    </svg>
+  </div>
 
   <!-- Agent Stage -->
-  <div class="flex flex-col items-center gap-2.5">
-    <div class={stageClasses(agent, 'purple')}>🤖</div>
-    <div class="text-[11px] font-medium uppercase tracking-wider text-gray-500">Agent</div>
-    <div class="font-mono text-xs text-gray-600">{agent.time}</div>
+  <div class="flex flex-col items-center gap-3">
+    <div class={stageClasses(agent, 'violet')}>
+      <svg class="w-7 h-7 {colorConfig.violet.icon}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M12 8V4H8"></path>
+        <rect width="16" height="12" x="4" y="8" rx="2"></rect>
+        <path d="M2 14h2"></path>
+        <path d="M20 14h2"></path>
+        <path d="M15 13v2"></path>
+        <path d="M9 13v2"></path>
+      </svg>
+    </div>
+    <div class="text-[10px] font-semibold uppercase tracking-widest text-slate-500">Analyze</div>
+    <div class="font-mono text-xs text-slate-400">{agent.time}</div>
   </div>
 
-  <div class="text-gray-600 text-lg -mt-6">→</div>
+  <!-- Arrow -->
+  <div class="flex items-center justify-center w-8 -mt-8">
+    <svg class="w-5 h-5 text-slate-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+      <path d="M5 12h14m-7-7 7 7-7 7"></path>
+    </svg>
+  </div>
 
   <!-- TTS Stage -->
-  <div class="flex flex-col items-center gap-2.5">
-    <div class={stageClasses(tts, 'orange')}>🔊</div>
-    <div class="text-[11px] font-medium uppercase tracking-wider text-gray-500">TTS</div>
-    <div class="font-mono text-xs text-gray-600">{tts.time}</div>
+  <div class="flex flex-col items-center gap-3">
+    <div class={stageClasses(tts, 'amber')}>
+      <svg class="w-7 h-7 {colorConfig.amber.icon}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M11 4.702a.705.705 0 0 0-1.203-.498L6.413 7.587A1.4 1.4 0 0 1 5.416 8H3a1 1 0 0 0-1 1v6a1 1 0 0 0 1 1h2.416a1.4 1.4 0 0 1 .997.413l3.383 3.384A.705.705 0 0 0 11 19.298z"></path>
+        <path d="M16 9a5 5 0 0 1 0 6"></path>
+        <path d="M19.364 18.364a9 9 0 0 0 0-12.728"></path>
+      </svg>
+    </div>
+    <div class="text-[10px] font-semibold uppercase tracking-widest text-slate-500">Synthesize</div>
+    <div class="font-mono text-xs text-slate-400">{tts.time}</div>
   </div>
 </div>
-

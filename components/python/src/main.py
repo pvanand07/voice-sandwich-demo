@@ -1,6 +1,7 @@
 import asyncio
 import contextlib
 import os
+from datetime import datetime
 from pathlib import Path
 from typing import AsyncIterator
 from uuid import uuid4
@@ -12,6 +13,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from langchain.agents import create_agent
 from langchain.messages import AIMessage, HumanMessage, ToolMessage
 from langchain_core.runnables import RunnableGenerator
+from langchain_mcp_adapters.client import MultiServerMCPClient
 from langgraph.checkpoint.memory import InMemorySaver
 from starlette.staticfiles import StaticFiles
 from starlette.websockets import WebSocketDisconnect
@@ -27,6 +29,7 @@ from events import (
     VoiceAgentEvent,
     event_to_dict,
 )
+from prompts import ASSISTANT_BASE_PROMPT
 from utils import merge_async_iters
 
 load_dotenv()
@@ -51,26 +54,6 @@ app.add_middleware(
 )
 
 
-def add_to_order(item: str, quantity: int) -> str:
-    """Add an item to the customer's sandwich order."""
-    return f"Added {quantity} x {item} to the order."
-
-
-def confirm_order(order_summary: str) -> str:
-    """Confirm the final order with the customer."""
-    return f"Order confirmed: {order_summary}. Sending to kitchen."
-
-
-system_prompt = """
-You are a helpful sandwich shop assistant. Your goal is to take the user's order.
-Be concise and friendly.
-
-Available toppings: lettuce, tomato, onion, pickles, mayo, mustard.
-Available meats: turkey, ham, roast beef.
-Available cheeses: swiss, cheddar, provolone.
-
-${CARTESIA_TTS_SYSTEM_PROMPT}
-"""
 
 DEFAULT_MODEL_CONFIG = {
     "model": "openai/gpt-4.1",
@@ -83,12 +66,18 @@ DEFAULT_MODEL_CONFIG = {
 
 model = ChatOpenAI(**DEFAULT_MODEL_CONFIG)
 
-agent = create_agent(
-    model=model,
-    tools=[add_to_order, confirm_order],
-    system_prompt=system_prompt,
-    checkpointer=InMemorySaver(),
+# Initialize MCP client for HTTP-based MCP server
+mcp_client = MultiServerMCPClient(
+    {
+        "elevatics": {
+            "transport": "http",
+            "url": "https://mcp1001.elevatics.site/mcp",
+        }
+    }
 )
+
+# Agent will be initialized at startup with MCP tools
+agent = None
 
 
 async def _stt_stream(
@@ -185,6 +174,9 @@ async def _agent_stream(
 
         # When we receive a final transcript, invoke the agent
         if event.type == "stt_output":
+            # Ensure agent is initialized
+            if agent is None:
+                raise RuntimeError("Agent not initialized. Please wait for startup to complete.")
             # Stream the agent's response using LangChain's astream method.
             # stream_mode="messages" yields message chunks as they're generated.
             stream = agent.astream(
@@ -311,6 +303,25 @@ async def websocket_endpoint(websocket: WebSocket):
 
 
 app.mount("/", StaticFiles(directory=STATIC_DIR, html=True), name="static")
+
+
+@app.on_event("startup")
+async def startup_event():
+    """Initialize the agent with MCP tools at application startup."""
+    global agent
+    # Get tools from MCP client
+    mcp_tools = await mcp_client.get_tools()
+    # Format the system prompt with current date
+    system_prompt = ASSISTANT_BASE_PROMPT.format(
+        today_date=datetime.now().strftime("%Y-%m-%d")
+    )
+    # Create the agent with MCP tools only
+    agent = create_agent(
+        model=model,
+        tools=mcp_tools,
+        system_prompt=system_prompt,
+        checkpointer=InMemorySaver(),
+    )
 
 
 if __name__ == "__main__":
