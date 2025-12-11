@@ -103,9 +103,12 @@ export function createVoiceSession(): VoiceSession {
 
     session.setStatus("connecting");
 
-    // Connect WebSocket
+    // Connect WebSocket. Allow override for deployments where the API lives on
+    // a different host than the static assets.
     const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-    ws = new WebSocket(`${protocol}//${window.location.host}/ws`);
+    const wsUrl =
+      import.meta.env.VITE_WS_URL ?? `${protocol}//${window.location.host}/ws`;
+    ws = new WebSocket(wsUrl);
     ws.binaryType = "arraybuffer";
 
     ws.onopen = async () => {
