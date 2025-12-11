@@ -47,9 +47,17 @@ async def merge_async_iters(*aiters: AsyncIterator[T]) -> AsyncIterator[T]:
     sentinel = object()
 
     async def producer(aiter: AsyncIterator[Any]) -> None:
-        async for item in aiter:
-            await queue.put(item)
-        await queue.put(sentinel)
+        try:
+            async for item in aiter:
+                await queue.put(item)
+        except Exception:
+            # Silently handle exceptions (e.g., WebSocketDisconnect) that occur
+            # when iterators are cancelled or connections close. These are expected
+            # during normal shutdown and don't need to be logged.
+            pass
+        finally:
+            # Always signal completion, even if an exception occurred
+            await queue.put(sentinel)
 
     async with asyncio.TaskGroup() as tg:
         for aiter in aiters:
