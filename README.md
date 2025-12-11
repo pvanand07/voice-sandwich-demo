@@ -91,6 +91,47 @@ cd ../python
 uv run src/main.py
 ```
 
+### Using Docker
+
+#### Prerequisites
+
+- **Docker** and **Docker Compose** installed
+
+#### Setup
+
+1. Create a `.env` file in the project root with your API keys:
+
+```bash
+ASSEMBLYAI_API_KEY=your_key_here
+CARTESIA_API_KEY=your_key_here
+OPENROUTER_API_KEY=your_key_here
+```
+
+2. Build and run with Docker Compose:
+
+```bash
+# Build and start the container
+docker-compose up --build
+
+# Or run in detached mode
+docker-compose up -d --build
+```
+
+The app will be available at `http://localhost:8000`
+
+#### Docker Commands
+
+```bash
+# Stop the container
+docker-compose down
+
+# View logs
+docker-compose logs -f
+
+# Rebuild without cache
+docker-compose build --no-cache
+```
+
 ## Project Structure
 
 ```

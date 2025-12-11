@@ -1,0 +1,45 @@
+# Git
+.git
+.gitignore
+
+# Python
+components/python/.venv
+components/python/__pycache__
+components/python/**/__pycache__
+components/python/**/*.pyc
+components/python/**/*.pyo
+components/python/**/*.pyd
+components/python/.pytest_cache
+components/python/*.egg-info
+
+# Node
+components/web/node_modules
+components/web/dist
+components/typescript/node_modules
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# IDE
+.vscode
+.idea
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Build artifacts
+*.log
+*.tmp
+
+# Test files
+components/python/src/test_*.py
+components/python/src/*test*.pcm
+components/python/src/*test*.wav
+
+
